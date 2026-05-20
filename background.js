@@ -8,7 +8,6 @@
  */
 
 import storage from './lib/storage.js';
-import { getDepth, walkSubtree, clearCache } from './lib/tree.js';
 
 // ---------------------------------------------------------------------------
 // populateEnabledFolders

@@ -164,7 +164,7 @@ async function goToScreen3() {
 
     const btnKeep = document.createElement('button');
     btnKeep.className = 'btn-secondary';
-    btnKeep.textContent = `Keep ${escapeHtml(displayName)} as primary`;
+    btnKeep.textContent = `Keep ${displayName} as primary`;
     btnKeep.addEventListener('click', async () => {
       willBePrimary = false;
       await updateKnownDevices();
