@@ -8,9 +8,12 @@
  */
 
 import storage from './lib/storage.js';
-import { invalidateCache, getDepth, isDepthAtMost2 } from './lib/tree.js';
-import { addSuppression } from './lib/suppression.js';
+import { invalidateCache, getDepth, isDepthAtMost2, walkSubtree } from './lib/tree.js';
+import { addSuppression, cleanExpiredSuppressions } from './lib/suppression.js';
 import { notifyRemoved, notifyCreated } from './lib/bulk-import.js';
+import { takeSnapshot } from './lib/undo.js';
+import { rebuildFolder } from './lib/rebuild.js';
+import { initTracker } from './lib/tracker.js';
 
 // ---------------------------------------------------------------------------
 // populateEnabledFolders
@@ -110,8 +113,14 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
     // 2. Populate enabledFolders with all depth <= 2 folders
     await populateEnabledFolders();
 
-    // 3. Open the onboarding tab
+    // 3. Register the hourly rebuild alarm
+    chrome.alarms.create('rebuild', { periodInMinutes: 60 });
+
+    // 4. Open the onboarding tab
     chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
+
+    // 5. Run startup initialization (service workers don't fire onStartup on first install)
+    await onStartup();
   }
 
   if (reason === 'update') {
@@ -475,3 +484,351 @@ chrome.bookmarks.onRemoved.addListener(handleRemoved);
 chrome.bookmarks.onChanged.addListener(handleChanged);
 chrome.bookmarks.onMoved.addListener(handleMoved);
 chrome.bookmarks.onCreated.addListener(handleCreated);
+
+// ---------------------------------------------------------------------------
+// Startup initialization (Step 13)
+// ---------------------------------------------------------------------------
+
+/**
+ * Run on every service-worker startup and on first install.
+ * Registers webNavigation listener, cleans expired suppressions,
+ * and recovers from any stale job left by a previous crash.
+ */
+async function onStartup() {
+  initTracker();  // register webNavigation listener
+  await cleanExpiredSuppressions();
+  await checkStaleJob();
+}
+
+chrome.runtime.onStartup.addListener(() => onStartup());
+
+// ---------------------------------------------------------------------------
+// Stale-job recovery (Step 13)
+// ---------------------------------------------------------------------------
+
+/**
+ * If a currentJob was recorded more than 10 minutes ago the service worker
+ * likely crashed mid-run.  Clear the flag and raise staleJobDetected so the
+ * popup can show a warning badge.
+ */
+async function checkStaleJob() {
+  const job = await storage.local.get('currentJob');
+  if (!job) return;
+  const ageMs = Date.now() - job.startedAt;
+  if (ageMs > 10 * 60 * 1000) {  // > 10 minutes
+    // Clear the stale job and flag for popup to show badge
+    await storage.local.set('currentJob', null);
+    await storage.local.set('staleJobDetected', true);
+    console.log('[background] stale currentJob cleared after %d minutes', Math.round(ageMs / 60000));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Core rebuild orchestration (Step 13)
+// ---------------------------------------------------------------------------
+
+/**
+ * Run a full scheduled rebuild.
+ * @param {{ ignoreNextRunAt?: boolean, ignoreIdle?: boolean }} opts
+ */
+async function runRebuild(opts = {}) {
+  const [primaryDeviceId, deviceId] = await Promise.all([
+    storage.sync.get('primaryDeviceId'),
+    storage.local.get('deviceId'),
+  ]);
+  if (!primaryDeviceId || primaryDeviceId !== deviceId) return;  // not primary
+
+  const now = Date.now();
+
+  if (!opts.ignoreNextRunAt) {
+    const nextRunAt = await storage.local.get('nextRunAt');
+    if (nextRunAt && now < nextRunAt) return;  // not due yet
+  }
+
+  if (!opts.ignoreIdle) {
+    const idleState = await chrome.idle.queryState(60);
+    if (idleState === 'active') {
+      await storage.local.set('nextRunAt', now + 15 * 60 * 1000);
+      console.log('[background] rebuild deferred 15m (device active)');
+      return;
+    }
+  }
+
+  // Primary-handoff reconciliation (if newly became primary)
+  await maybeReconcileOnHandoff(primaryDeviceId);
+
+  // Take snapshot BEFORE any mutations
+  await takeSnapshot('Pre-scheduled rebuild');
+
+  // Set currentJob
+  await storage.local.set('currentJob', { startedAt: now, kind: 'scheduled' });
+
+  try {
+    await executeRebuild(now);
+  } finally {
+    await storage.local.set('currentJob', null);
+  }
+}
+
+/**
+ * The actual rebuild loop: load all data, run depth-≤2 folders bottom-up,
+ * then run deep folders (alphabetical sort only), then update timestamps.
+ * @param {number} now
+ */
+async function executeRebuild(now) {
+  // Load all data once
+  const [localData, syncData] = await Promise.all([
+    loadLocalRebuildData(),
+    loadSyncRebuildData(),
+  ]);
+
+  const { enabledFolders } = localData;
+
+  // --- Depth ≤ 2 folders: full rebuild (MRU + sort) ---
+  // Sort depth-2 folders before depth-1 (bottom-up so subtree caches are warm)
+  const depthOneFolders = ['1', '2', '3'].filter(id => enabledFolders[id]);
+  const depthTwoFolders = Object.keys(enabledFolders).filter(id => !['1', '2', '3'].includes(id));
+
+  for (const folderId of [...depthTwoFolders, ...depthOneFolders]) {
+    const settings = enabledFolders[folderId] ?? {};
+    const options = buildFolderOptions(folderId, settings, localData, syncData);
+    const result = await rebuildFolder(folderId, options);
+    if (result.errors.length > 0) {
+      console.warn('[background] rebuildFolder errors for folder %s:', folderId, result.errors);
+    }
+  }
+
+  // --- Depth > 2 folders: alphabetical sort only ---
+  await rebuildDeepFolders(localData, syncData);
+
+  // Update run timestamps
+  const scheduleDays = syncData.scheduleDays ?? 1;
+  const nextRunAt = (typeof scheduleDays === 'number')
+    ? now + scheduleDays * 86_400_000
+    : null;  // "manual" schedule
+
+  await Promise.all([
+    storage.local.set('nextRunAt', nextRunAt),
+    storage.local.set('lastRebuildCompletedAt', now),
+    // Write final state of folderHashes and duplicates (already written per-folder by rebuildFolder, but ensure final state is persisted)
+  ]);
+
+  console.log('[background] rebuild complete');
+}
+
+// ---------------------------------------------------------------------------
+// Data loading helpers (Step 13)
+// ---------------------------------------------------------------------------
+
+async function loadLocalRebuildData() {
+  const [counts, duplicates, suppression, enabledFolders, folderHashes, lastRebuildCompletedAt] =
+    await Promise.all([
+      storage.local.get('counts'),
+      storage.local.get('duplicates'),
+      storage.local.get('suppression'),
+      storage.local.get('enabledFolders'),
+      storage.local.get('folderHashes'),
+      storage.local.get('lastRebuildCompletedAt'),
+    ]);
+  return {
+    counts: counts ?? {},
+    duplicates: duplicates ?? {},
+    suppression: suppression ?? [],
+    enabledFolders: enabledFolders ?? {},
+    folderHashes: folderHashes ?? {},
+    lastRebuildCompletedAt: lastRebuildCompletedAt ?? null,
+  };
+}
+
+async function loadSyncRebuildData() {
+  const [mruEnabledGlobally, mruItemsPerFolder, mruMinSubtreeSize, mruPrefix, defaultCandidateScope,
+         duplicateCap, sortBookmarksBar, sortOtherBookmarks, sortMobileBookmarks, scheduleDays] =
+    await Promise.all([
+      storage.sync.get('mruEnabledGlobally'),
+      storage.sync.get('mruItemsPerFolder'),
+      storage.sync.get('mruMinSubtreeSize'),
+      storage.sync.get('mruPrefix'),
+      storage.sync.get('defaultCandidateScope'),
+      storage.sync.get('duplicateCap'),
+      storage.sync.get('sortBookmarksBar'),
+      storage.sync.get('sortOtherBookmarks'),
+      storage.sync.get('sortMobileBookmarks'),
+      storage.sync.get('scheduleDays'),
+    ]);
+  return {
+    mruEnabledGlobally: mruEnabledGlobally ?? true,
+    mruItemsPerFolder: mruItemsPerFolder ?? 5,
+    mruMinSubtreeSize: mruMinSubtreeSize ?? 8,
+    mruPrefix: mruPrefix ?? '★ ',
+    defaultCandidateScope: defaultCandidateScope ?? 'subtree',
+    duplicateCap: duplicateCap ?? 500,
+    sortBookmarksBar: sortBookmarksBar ?? false,
+    sortOtherBookmarks: sortOtherBookmarks ?? true,
+    sortMobileBookmarks: sortMobileBookmarks ?? false,
+    scheduleDays: scheduleDays ?? 1,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Folder options builder (Step 13)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the options object to pass to rebuildFolder for a given folder.
+ * Applies root sort overrides for the three depth-1 roots ("1", "2", "3").
+ */
+function buildFolderOptions(folderId, settings, localData, syncData) {
+  // Root sort overrides for the three depth-1 roots
+  let sortEnabled = settings.sortEnabled ?? true;
+  if (folderId === '1') sortEnabled = syncData.sortBookmarksBar;
+  if (folderId === '2') sortEnabled = syncData.sortOtherBookmarks;
+  if (folderId === '3') sortEnabled = syncData.sortMobileBookmarks;
+
+  return {
+    mruEnabled: (syncData.mruEnabledGlobally) && (settings.mruEnabled ?? true),
+    sortEnabled,
+    candidateScope: settings.candidateScope ?? syncData.defaultCandidateScope,
+    lastUserEditAt: settings.lastUserEditAt ?? null,
+    counts: localData.counts,
+    duplicates: localData.duplicates,     // shared, mutated in-place
+    suppression: localData.suppression,
+    folderHashes: localData.folderHashes, // shared, mutated in-place
+    lastRebuildCompletedAt: localData.lastRebuildCompletedAt,
+    mruItemsPerFolder: syncData.mruItemsPerFolder,
+    mruMinSubtreeSize: syncData.mruMinSubtreeSize,
+    mruPrefix: syncData.mruPrefix,
+    duplicateCap: syncData.duplicateCap,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Deep folder rebuild — depth > 2 alphabetical sort only (Step 13)
+// ---------------------------------------------------------------------------
+
+/**
+ * Walk the full tree, find all folders at depth > 2, and rebuild each with
+ * mruEnabled: false and sortEnabled: true (alphabetical sort only).
+ */
+async function rebuildDeepFolders(localData, syncData) {
+  const tree = await chrome.bookmarks.getTree();
+  const deepFolderIds = [];
+
+  function collectDeepFolders(node, depth) {
+    if (node.id === '0') {
+      (node.children ?? []).forEach(c => collectDeepFolders(c, 1));
+      return;
+    }
+    if (!node.url && depth > 2) deepFolderIds.push(node.id);
+    if (!node.url) {
+      (node.children ?? []).forEach(c => collectDeepFolders(c, depth + 1));
+    }
+  }
+  collectDeepFolders(tree[0], 0);
+
+  for (const folderId of deepFolderIds) {
+    const options = buildFolderOptions(folderId, { sortEnabled: true }, localData, syncData);
+    options.mruEnabled = false;  // depth > 2 never gets MRU
+    await rebuildFolder(folderId, options).catch(e =>
+      console.error('[background] deep folder rebuild error for %s', folderId, e)
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Primary-handoff reconciliation (Step 13)
+// ---------------------------------------------------------------------------
+
+/**
+ * If the primary device has changed (handoff from another device to this one),
+ * reconcile the duplicates map so stale MRU entries don't persist.
+ * @param {string} currentPrimary
+ */
+async function maybeReconcileOnHandoff(currentPrimary) {
+  const lastKnownPrimary = await storage.local.get('lastKnownPrimary');
+  if (lastKnownPrimary === currentPrimary) return;  // no change
+
+  // Became primary (or first ever rebuild as primary) — update lastKnownPrimary
+  await storage.local.set('lastKnownPrimary', currentPrimary);
+
+  if (lastKnownPrimary === null || lastKnownPrimary === undefined) return;  // first-ever primary claim, no reconciliation needed
+
+  // Primary changed from a different device to this one — reconcile duplicates map
+  // by scanning depth-≤2 folders for mruPrefix-titled children
+  console.log('[background] primary handoff detected, reconciling duplicates map');
+  await reconcileDuplicatesMap();
+}
+
+/**
+ * Scan all depth-≤2 folders for children whose title starts with mruPrefix.
+ * Rebuild the duplicates map from what's actually in the tree.
+ *
+ * Known v1 limitation: user bookmarks with ★ prefix will be falsely treated
+ * as duplicates — documented as a known limitation.
+ */
+async function reconcileDuplicatesMap() {
+  // No direct chrome.storage.* calls — all via storage wrapper (invariant 1)
+  const mruPrefix = (await storage.sync.get('mruPrefix')) ?? '★ ';
+  const enabledFolders = (await storage.local.get('enabledFolders')) ?? {};
+  const duplicates = {};
+
+  for (const folderId of Object.keys(enabledFolders)) {
+    let children;
+    try {
+      children = await chrome.bookmarks.getChildren(folderId);
+    } catch { continue; }
+
+    const prefixedChildren = children.filter(c => c.url && c.title.startsWith(mruPrefix));
+    if (!prefixedChildren.length) continue;
+
+    // Build URL → original map for this subtree (all non-prefixed bookmarks)
+    const urlToOriginal = new Map();
+    await walkSubtree(folderId, node => {
+      if (node.url && !node.title.startsWith(mruPrefix)) {
+        if (!urlToOriginal.has(node.url)) urlToOriginal.set(node.url, node.id);
+      }
+    });
+
+    for (const child of prefixedChildren) {
+      const originalId = urlToOriginal.get(child.url);
+      if (originalId) {
+        duplicates[child.id] = {
+          originalId,
+          parentFolderId: folderId,
+          originalUrl: child.url,
+          createdAt: Date.now(),
+        };
+      }
+      // If no match: treat as user-prefixed regular bookmark, leave alone
+    }
+  }
+
+  await storage.local.set('duplicates', duplicates);
+  console.log('[background] reconcileDuplicatesMap: found %d duplicates', Object.keys(duplicates).length);
+}
+
+// ---------------------------------------------------------------------------
+// Alarm handler and manual rebuild message listener (Step 13)
+// ---------------------------------------------------------------------------
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== 'rebuild') return;
+  try {
+    await runRebuild({});
+  } catch (e) {
+    console.error('[background] alarm rebuild error', e);
+  }
+});
+
+/**
+ * Message listener for popup "Rebuild now" button.
+ * popup.js sends: { action: 'rebuildNow' }
+ * Response: { ok: true } or { ok: false, error: string }
+ */
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.action === 'rebuildNow') {
+    runRebuild({ ignoreNextRunAt: true, ignoreIdle: true })
+      .then(() => sendResponse({ ok: true }))
+      .catch(e => sendResponse({ ok: false, error: String(e) }));
+    return true;  // keep channel open for async response
+  }
+});
