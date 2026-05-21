@@ -1,3 +1,38 @@
 {
-  "_comment": { "message": "Strings populated in Step 16" }
+  "extName": {
+    "message": "Bookmark Organizer",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Automatically organises, deduplicates, and surfaces your most-used bookmarks.",
+    "description": "Extension description shown in Chrome's extension management page"
+  },
+  "popupRebuildNow": {
+    "message": "Rebuild now",
+    "description": "Button in popup to trigger immediate rebuild"
+  },
+  "popupUndoLastRebuild": {
+    "message": "Undo last rebuild",
+    "description": "Button in popup to restore the previous bookmark tree snapshot"
+  },
+  "popupClearlyRemove": {
+    "message": "Cleanly Remove Extension",
+    "description": "Footer link in popup that opens teardown section in options"
+  },
+  "popupOptions": {
+    "message": "Options",
+    "description": "Footer link in popup that opens the options page"
+  },
+  "onboardingWelcomeTitle": {
+    "message": "Welcome to Bookmark Organizer",
+    "description": "Title on onboarding screen 1"
+  },
+  "optionsTeardownTitle": {
+    "message": "Cleanly Remove Extension",
+    "description": "Teardown section heading in options"
+  },
+  "optionsTeardownModal": {
+    "message": "This will remove all ★-prefixed shortcuts the extension created. Your original bookmarks are not affected. Continue?",
+    "description": "Confirmation modal text for teardown"
+  }
 }
