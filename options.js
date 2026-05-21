@@ -194,11 +194,10 @@ async function renderMruFolderTable() {
   const wrap = document.getElementById('mru-folder-table-wrap');
   const enabledFolders = (await storage.local.get('enabledFolders')) ?? {};
 
-  // Only show depth-≤2 folders (path-based heuristic: depth ≤ 2 means ≤ 2 separators)
+  // Only show depth-≤2 folders (path is an array; depth ≤ 2 means ≤ 2 segments)
   const entries = Object.entries(enabledFolders).filter(([, v]) => {
-    if (!v || typeof v.path !== 'string') return false;
-    const depth = (v.path.match(/\//g) || []).length;
-    return depth <= 2;
+    if (!v || !Array.isArray(v.path)) return false;
+    return v.path.length <= 2;
   });
 
   if (entries.length === 0) {
@@ -226,7 +225,7 @@ async function renderMruFolderTable() {
     // Folder path cell
     const tdPath = document.createElement('td');
     tdPath.className = 'folder-path';
-    tdPath.textContent = folderData.path || folderId;
+    tdPath.textContent = Array.isArray(folderData.path) ? folderData.path.join(' › ') : folderId;
     tr.appendChild(tdPath);
 
     // MRU enabled checkbox
@@ -308,9 +307,8 @@ async function renderSortFolderTable() {
   const enabledFolders = (await storage.local.get('enabledFolders')) ?? {};
 
   const entries = Object.entries(enabledFolders).filter(([, v]) => {
-    if (!v || typeof v.path !== 'string') return false;
-    const depth = (v.path.match(/\//g) || []).length;
-    return depth <= 2;
+    if (!v || !Array.isArray(v.path)) return false;
+    return v.path.length <= 2;
   });
 
   if (entries.length === 0) {
@@ -336,7 +334,7 @@ async function renderSortFolderTable() {
 
     const tdPath = document.createElement('td');
     tdPath.className = 'folder-path';
-    tdPath.textContent = folderData.path || folderId;
+    tdPath.textContent = Array.isArray(folderData.path) ? folderData.path.join(' › ') : folderId;
     tr.appendChild(tdPath);
 
     const tdSort = document.createElement('td');
@@ -512,7 +510,7 @@ async function initSnapshots() {
         listEl.innerHTML = '<li><span class="empty-note">No snapshots yet.</span></li>';
         return;
       }
-      for (const snap of snapshots) {
+      for (const snap of snapshots.slice(0, 5)) {
         const li = document.createElement('li');
 
         const meta = document.createElement('div');
