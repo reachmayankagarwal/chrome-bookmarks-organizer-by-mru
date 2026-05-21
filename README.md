@@ -1,4 +1,4 @@
-# Most Recently Used (MRU) Bookmarks Organizer
+# Most Recently Used (MRU) Bookmarks Organizer for Chrome
 
 A Chrome extension that alphabetizes your bookmark folders and surfaces your most-used bookmarks as pinned shortcuts.
 
