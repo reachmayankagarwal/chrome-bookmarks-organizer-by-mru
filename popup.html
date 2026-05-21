@@ -7,7 +7,47 @@
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-  <!-- Popup UI — populated in later steps -->
+  <!-- Stale-job banner (shown if staleJobDetected) -->
+  <div id="stale-banner" class="banner banner-warn hidden">
+    Rebuild interrupted — <a href="#" id="stale-restore">restore snapshot?</a>
+  </div>
+
+  <!-- Device status banner (secondary / no-primary only) -->
+  <div id="device-banner" class="banner hidden"></div>
+
+  <!-- Status block (primary only) -->
+  <div id="status-block">
+    <div id="status-line" class="status-line"></div>
+    <div id="footprint-line" class="footprint-line"></div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="button-row">
+    <button id="btn-rebuild" class="btn-primary">Rebuild now</button>
+    <button id="btn-undo" class="btn-secondary">Undo last rebuild</button>
+  </div>
+
+  <!-- Auto-claim notice (shown after 30-day auto-claim) -->
+  <div id="autoclaim-banner" class="banner banner-info hidden"></div>
+
+  <!-- Quick search -->
+  <div class="search-section">
+    <input id="search-input" type="search" placeholder="Search bookmarks…" autocomplete="off" />
+    <ul id="search-results" class="result-list hidden"></ul>
+  </div>
+
+  <!-- Top 5 bookmarks -->
+  <div id="top5-section">
+    <div class="section-label">Most used</div>
+    <ul id="top5-list" class="result-list"></ul>
+  </div>
+
+  <!-- Footer -->
+  <footer class="popup-footer">
+    <a href="#" id="link-teardown">Cleanly Remove Extension</a>
+    <a href="#" id="link-options">Options</a>
+  </footer>
+
   <script type="module" src="popup.js"></script>
 </body>
 </html>

@@ -1,1 +1,155 @@
-/* Popup styles — populated in later steps */
+/* Popup styles */
+
+body {
+  width: 360px;
+  min-height: 200px;
+  padding: 12px;
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  margin: 0;
+}
+
+.banner {
+  padding: 8px 10px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.banner-warn {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.banner-info {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+.hidden {
+  display: none;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.btn-primary {
+  background: #0066cc;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0055aa;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: #0066cc;
+  border: 1px solid #0066cc;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #f0f4ff;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.result-list {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.result-list li {
+  padding: 5px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-list li:hover {
+  background: #f0f0f0;
+}
+
+.result-list li.empty-note {
+  color: #999;
+  cursor: default;
+  font-style: italic;
+}
+
+.result-list li.empty-note:hover {
+  background: transparent;
+}
+
+.section-label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  margin: 10px 0 4px;
+}
+
+.status-line,
+.footprint-line {
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 3px;
+}
+
+.search-section {
+  margin: 10px 0;
+}
+
+#search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+#search-input:focus {
+  outline: none;
+  border-color: #0066cc;
+}
+
+.popup-footer {
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.popup-footer a {
+  color: #666;
+  text-decoration: none;
+}
+
+.popup-footer a:hover {
+  text-decoration: underline;
+}
+
+#link-teardown {
+  color: #dc3545;
+}
