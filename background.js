@@ -10,6 +10,7 @@
 import storage from './lib/storage.js';
 import { invalidateCache, getDepth, isDepthAtMost2 } from './lib/tree.js';
 import { addSuppression } from './lib/suppression.js';
+import { notifyRemoved, notifyCreated } from './lib/bulk-import.js';
 
 // ---------------------------------------------------------------------------
 // populateEnabledFolders
@@ -177,6 +178,12 @@ async function handleRemoved(id, removeInfo) {
   try {
     const currentJob = await storage.local.get('currentJob');
     if (currentJob) return;
+
+    // Check if this is a bulk import situation (large subtree removal).
+    // notifyRemoved returns true when it detects > 50 leaf bookmarks removed
+    // at once, enters a monitoring window, and takes over cleanup responsibility.
+    const isBulkImport = notifyRemoved(removeInfo.node);
+    if (isBulkImport) return; // bulk-import.js takes over
 
     const removedIds = collectRemovedIds(removeInfo.node);
 
@@ -420,6 +427,8 @@ async function handleCreated(id, bookmark) {
   try {
     const currentJob = await storage.local.get('currentJob');
     if (currentJob) return;
+
+    notifyCreated(); // notify bulk-import detector (no-op when not monitoring)
 
     // Invalidate tree cache for the new node's parent
     await invalidateCache(bookmark.parentId);
