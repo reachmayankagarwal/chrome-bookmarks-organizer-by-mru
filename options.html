@@ -4,9 +4,297 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bookmark Organizer — Options</title>
+  <link rel="stylesheet" href="options.css" />
 </head>
 <body>
-  <!-- Options UI — populated in later steps -->
+  <div id="options-container">
+    <h1>Bookmark Organizer — Options</h1>
+
+    <!-- ── 1. Schedule ─────────────────────────────────────────────────── -->
+    <section id="section-schedule">
+      <h2>Schedule</h2>
+      <p style="font-size:13px;color:#555;margin:0 0 12px;">
+        How often should the extension automatically organise your bookmarks?
+      </p>
+      <div class="radio-group" id="schedule-radios">
+        <label>
+          <input type="radio" name="scheduleDays" value="manual" />
+          Manual only (never auto-run)
+        </label>
+        <label>
+          <input type="radio" name="scheduleDays" value="1" />
+          Every day
+        </label>
+        <label>
+          <input type="radio" name="scheduleDays" value="2" />
+          Every 2 days
+        </label>
+        <label>
+          <input type="radio" name="scheduleDays" value="3" />
+          Every 3 days
+        </label>
+        <label>
+          <input type="radio" name="scheduleDays" value="7" />
+          Every 7 days
+        </label>
+      </div>
+      <div id="schedule-saved" class="saved-flash hidden" aria-live="polite">Saved</div>
+    </section>
+
+    <!-- ── 2. MRU Region ───────────────────────────────────────────────── -->
+    <section id="section-mru">
+      <h2>Most-Recently-Used (MRU) Shortcuts</h2>
+
+      <label>
+        <input type="checkbox" id="mru-enabled-globally" />
+        Enable MRU shortcuts globally
+      </label>
+
+      <hr class="section-divider" />
+
+      <div class="form-row">
+        <label for="mru-items-per-folder" class="field-label" style="margin-bottom:0;">
+          Items per folder:
+        </label>
+        <input type="number" id="mru-items-per-folder" min="3" max="10" value="5" />
+      </div>
+
+      <div class="form-row">
+        <label for="mru-min-subtree" class="field-label" style="margin-bottom:0;">
+          Minimum subtree size:
+        </label>
+        <input type="number" id="mru-min-subtree" min="1" value="8" />
+      </div>
+
+      <div class="field-group">
+        <span class="field-label">Title prefix:</span>
+        <div class="form-row" style="margin-bottom:4px;">
+          <input type="text" id="mru-prefix" value="★ " style="width:160px;" />
+          <span id="prefix-preview" class="prefix-preview">e.g. ★ GitHub</span>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <span class="field-label">Default candidate scope:</span>
+        <div class="radio-group" id="scope-radios">
+          <label>
+            <input type="radio" name="defaultCandidateScope" value="subtree" />
+            Subtree (all bookmarks under folder, recursively)
+          </label>
+          <label>
+            <input type="radio" name="defaultCandidateScope" value="direct" />
+            Direct children only
+          </label>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label for="duplicate-cap" class="field-label" style="margin-bottom:0;">
+          Global duplicate cap:
+        </label>
+        <input type="number" id="duplicate-cap" min="1" value="500" />
+      </div>
+
+      <div id="mru-saved" class="saved-flash hidden" aria-live="polite">Saved</div>
+
+      <hr class="section-divider" />
+
+      <h3>Per-folder MRU overrides</h3>
+      <p style="font-size:12px;color:#666;margin:0 0 8px;">
+        Folders at depth 1–2 that have been configured. Changes are saved immediately.
+      </p>
+      <div id="mru-folder-table-wrap">
+        <span class="empty-note">Loading folders…</span>
+      </div>
+    </section>
+
+    <!-- ── 3. Alphabetical Sort ────────────────────────────────────────── -->
+    <section id="section-sort">
+      <h2>Alphabetical Sort</h2>
+
+      <label>
+        <input type="checkbox" id="sort-bookmarks-bar" />
+        Sort Bookmarks Bar
+      </label>
+      <label>
+        <input type="checkbox" id="sort-other-bookmarks" />
+        Sort Other Bookmarks
+      </label>
+      <label>
+        <input type="checkbox" id="sort-mobile-bookmarks" />
+        Sort Mobile Bookmarks
+      </label>
+
+      <div id="sort-saved" class="saved-flash hidden" aria-live="polite">Saved</div>
+
+      <hr class="section-divider" />
+
+      <h3>Per-folder sort overrides</h3>
+      <p style="font-size:12px;color:#666;margin:0 0 8px;">
+        Folders at depth 1–2 that have been configured. Uncheck to exclude a folder from sorting.
+      </p>
+      <div id="sort-folder-table-wrap">
+        <span class="empty-note">Loading folders…</span>
+      </div>
+    </section>
+
+    <!-- ── 4. Devices ─────────────────────────────────────────────────── -->
+    <section id="devices">
+      <h2>Devices</h2>
+
+      <div id="current-device-info" style="margin-bottom:14px;">
+        <span id="current-device-name" class="device-name">—</span>
+        <span id="current-device-badge" class="badge badge-none" style="margin-left:8px;">None</span>
+      </div>
+
+      <div>
+        <span class="field-label">Rename this device:</span>
+        <div class="rename-row">
+          <input type="text" id="device-name-input" placeholder="Device name" />
+          <button id="btn-save-device-name" class="btn-primary">Save</button>
+        </div>
+        <div id="device-rename-saved" class="saved-flash hidden" aria-live="polite">Saved</div>
+        <div id="device-rename-error" class="error-msg hidden"></div>
+      </div>
+
+      <hr class="section-divider" />
+
+      <h3>Known devices</h3>
+      <ul id="known-devices-list" class="device-list">
+        <li><span class="empty-note">Loading…</span></li>
+      </ul>
+
+      <div id="btn-claim-primary-wrap" class="button-row hidden">
+        <button id="btn-claim-primary" class="btn-secondary">Make this device Primary</button>
+      </div>
+      <div id="devices-error" class="error-msg hidden"></div>
+    </section>
+
+    <!-- ── 5. Data ─────────────────────────────────────────────────────── -->
+    <section id="section-data">
+      <h2>Data</h2>
+
+      <!-- 5a: Snapshots -->
+      <h3>Snapshots (undo history)</h3>
+      <ul id="snapshot-list" class="snapshot-list">
+        <li><span class="empty-note">Loading…</span></li>
+      </ul>
+      <div id="snapshot-restore-result" class="hidden"></div>
+
+      <hr class="section-divider" />
+
+      <!-- 5b: Export counts -->
+      <h3>Export click data</h3>
+      <p style="font-size:13px;color:#555;margin:0 0 8px;">
+        Download your bookmark click history as a JSON file.
+      </p>
+      <div class="button-row">
+        <button id="btn-export-counts" class="btn-secondary">Export click data (JSON)</button>
+      </div>
+
+      <hr class="section-divider" />
+
+      <!-- 5c: Import counts -->
+      <h3>Import click data</h3>
+      <p style="font-size:13px;color:#555;margin:0 0 8px;">
+        Import a previously-exported JSON file. Existing click counts will be merged (incremented).
+      </p>
+      <div class="button-row">
+        <label class="btn-secondary" style="cursor:pointer;display:inline-block;">
+          Choose file…
+          <input type="file" id="import-counts-input" accept=".json" class="hidden" />
+        </label>
+      </div>
+      <div id="import-result" class="hidden" style="margin-top:8px;font-size:13px;"></div>
+
+      <hr class="section-divider" />
+
+      <!-- 5d: Reset all counts -->
+      <h3>Reset all counts</h3>
+      <p style="font-size:13px;color:#555;margin:0 0 8px;">
+        Permanently clears click history on this device.
+      </p>
+      <div class="button-row">
+        <button id="btn-reset-counts" class="btn-danger">Reset all counts</button>
+      </div>
+      <div id="reset-result" class="hidden" style="margin-top:8px;font-size:13px;"></div>
+
+      <hr class="section-divider" />
+
+      <!-- 5e: Teardown -->
+      <div id="teardown-section">
+        <h3>Cleanly Remove Extension</h3>
+        <p style="font-size:13px;color:#555;margin:0 0 12px;">
+          Removes all ★-prefixed shortcut bookmarks the extension created. Your original
+          bookmarks are not affected. A safety snapshot is taken first.
+        </p>
+        <button id="btn-teardown" class="btn-danger">Cleanly Remove Extension…</button>
+        <div id="teardown-error" class="error-msg hidden"></div>
+        <div id="teardown-success" class="success-msg hidden"></div>
+      </div>
+    </section>
+
+    <!-- ── 6. Privacy ─────────────────────────────────────────────────── -->
+    <section id="section-privacy">
+      <h2>Privacy</h2>
+      <ul class="privacy-list">
+        <li>
+          <strong>Stored locally (this device only, never synced):</strong>
+          click counts, safety snapshots, duplicate map, device ID and name.
+        </li>
+        <li>
+          <strong>Synced via Chrome Sync (shared across all your Chrome profiles):</strong>
+          schedule settings, MRU settings, sort settings, known devices list,
+          and primary device ID.
+        </li>
+        <li>
+          <strong>What <code>webNavigation</code> sees:</strong>
+          only navigations classified as <code>auto_bookmark</code> — i.e. navigations
+          triggered by clicking a bookmark. It does <em>not</em> see page contents,
+          form data, browsing history, or any navigation that was not from a bookmark click.
+        </li>
+        <li>
+          <strong>Click data is per-device:</strong>
+          counts and history remain on the device where you clicked. They are never
+          uploaded to any server or shared with any third party.
+        </li>
+      </ul>
+    </section>
+  </div><!-- /#options-container -->
+
+  <!-- ── Modal: Reset counts ─────────────────────────────────────────── -->
+  <div id="modal-reset" class="modal-overlay hidden" role="dialog" aria-modal="true"
+       aria-labelledby="modal-reset-title">
+    <div class="modal-box">
+      <h3 id="modal-reset-title">Reset all click counts</h3>
+      <p id="modal-reset-msg">
+        To protect your data, you must download your click history first.
+        Download now to enable the reset.
+      </p>
+      <div class="modal-actions">
+        <button id="modal-reset-download" class="btn-secondary">Download &amp; Continue</button>
+        <button id="modal-reset-confirm" class="btn-danger hidden">Confirm Reset</button>
+        <button id="modal-reset-cancel" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: Teardown ─────────────────────────────────────────────── -->
+  <div id="modal-teardown" class="modal-overlay hidden" role="dialog" aria-modal="true"
+       aria-labelledby="modal-teardown-title">
+    <div class="modal-box">
+      <h3 id="modal-teardown-title">Cleanly Remove Extension</h3>
+      <p>
+        This will remove all ★-prefixed shortcuts the extension created.
+        Your original bookmarks are not affected. Continue?
+      </p>
+      <div class="modal-actions">
+        <button id="modal-teardown-run" class="btn-danger">Run teardown</button>
+        <button id="modal-teardown-cancel" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="options.js"></script>
 </body>
 </html>
