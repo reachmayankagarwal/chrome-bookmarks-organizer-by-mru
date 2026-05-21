@@ -51,7 +51,7 @@ async function initPopup() {
   // 3. Stale-job banner
   if (staleJobDetected) {
     document.getElementById('stale-banner').classList.remove('hidden');
-    await storage.local.set('staleJobDetected', false);  // clear flag
+    await storage.local.remove('staleJobDetected');  // clear flag
   }
 
   // 4. Device banner (non-primary only)
@@ -128,7 +128,7 @@ function renderStatusLine(lastAt, nextAt, scheduleDays, firstRunCompleted, dupli
 
   // MRU notice: firstRun done but no duplicates yet
   if (firstRunCompleted && Object.keys(duplicates ?? {}).length === 0) {
-    el.textContent += ' — MRU regions appear after next rebuild.';
+    el.textContent += ' MRU regions appear after next rebuild.';
   }
 }
 
