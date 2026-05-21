@@ -10,7 +10,7 @@
 
 import storage from './lib/storage.js';
 import { takeSnapshot, listSnapshots, restoreSnapshot } from './lib/undo.js';
-import { getDeviceId, updateKnownDevices, isPrimaryDevice } from './lib/device.js';
+import { updateKnownDevices, isPrimaryDevice } from './lib/device.js';
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -700,6 +700,10 @@ function initResetCounts() {
 
   btnCancel.addEventListener('click', closeModal);
 
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+  });
+
   btnDownload.addEventListener('click', async () => {
     await triggerCountsExport();
     downloadDone = true;
@@ -748,6 +752,10 @@ function initTeardown() {
     modal.classList.add('hidden');
   });
 
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) modal.classList.add('hidden');
+  });
+
   btnRun.addEventListener('click', async () => {
     modal.classList.add('hidden');
     btnTeardown.disabled = true;
@@ -787,6 +795,7 @@ function initTeardown() {
         'Teardown complete. All ★-prefixed shortcuts have been removed. ' +
         'You can safely uninstall the extension.';
       teardownSuccess.classList.remove('hidden');
+      btnTeardown.textContent = 'Teardown already run';
     } catch (err) {
       showError(teardownError, `Teardown failed: ${err.message}`);
       btnTeardown.disabled = false;
@@ -833,6 +842,13 @@ async function initOptions() {
     handleHashRouting();
   } catch (err) {
     console.error('[options] initOptions error:', err);
+    const container = document.getElementById('options-container');
+    if (container) {
+      const errDiv = document.createElement('div');
+      errDiv.className = 'error-msg';
+      errDiv.textContent = `Failed to load options: ${err.message}. Try reloading the page.`;
+      container.prepend(errDiv);
+    }
   }
 }
 
