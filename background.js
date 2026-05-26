@@ -684,8 +684,13 @@ function buildFolderOptions(folderId, settings, localData, syncData) {
   if (folderId === '2') sortEnabled = syncData.sortOtherBookmarks;
   if (folderId === '3') sortEnabled = syncData.sortMobileBookmarks;
 
+  // Bookmarks Bar (id "1") never gets MRU star pins; its child folders still do.
+  const mruEnabled = folderId === '1'
+    ? false
+    : (syncData.mruEnabledGlobally) && (settings.mruEnabled ?? true);
+
   return {
-    mruEnabled: (syncData.mruEnabledGlobally) && (settings.mruEnabled ?? true),
+    mruEnabled,
     sortEnabled,
     candidateScope: settings.candidateScope ?? syncData.defaultCandidateScope,
     lastUserEditAt: settings.lastUserEditAt ?? null,
